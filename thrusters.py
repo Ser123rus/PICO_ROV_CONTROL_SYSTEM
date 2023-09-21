@@ -1,5 +1,5 @@
 import time
-from machine import Pin
+from machine import Pin, PWM, SPI
 import usocket
 
 servos = [] #servo obj
