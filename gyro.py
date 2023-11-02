@@ -4,7 +4,7 @@ from mpu6500 import MPU6500
 
 class Gyro:
     def __init__(self):
-        self.i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
+        self.i2c = I2C(1, scl=Pin(15), sda=Pin(14), freq=400000)
         self.sensor = MPU6500(self.i2c)
 
     def start(self):
@@ -30,8 +30,8 @@ class Gyro:
             data = self.sensor.gyro
             print(data[index])
             utime.sleep_ms(1000)
-
+'''
 gyro = Gyro()
 gyro.start()
-        
+   '''     
     
