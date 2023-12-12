@@ -1,54 +1,54 @@
-import utime
-from machine import I2C, Pin
+from machine import Pin, I2C
 from mpu6500 import MPU6500
 import math
+import utime
 
-
-class Gyro:
+class GyroscopeDataLogger:
     def __init__(self):
         self.i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
         self.sensor = MPU6500(self.i2c)
-   
-    def start(self):
-        print("MPU9250 id: " + hex(self.sensor.whoami))
-        while True:
-            data = self.sensor.gyro
-            yaw, pitch, roll = self.get_yaw_pitch_roll(data)
-            print("Yaw:", yaw)
-            print("Pitch:", pitch)
-            print("Roll:", roll)
-            utime.sleep_ms(100)
+        self.zero_position = (0, 0, 0)
+        self.current_angle = (0, 0, 0)
+        self.prev_time = utime.ticks_ms()
 
-    def print_column(self, column):
-        if column == "YAW":
-            index = 0
-        elif column == "PITCH":
-            index = 1
-        else:  # assume column == "ROLL"
-            index = 2
-        
-        print(f"{column}:")
-        while True:
-            data = self.sensor.gyro
-            print(data[index])
-            utime.sleep_ms(1000)
+    def rad_to_degrees(self, angle_rad):
+        return angle_rad * (180.0 / math.pi)
 
-    def get_yaw_pitch_roll(self, gyro_data):
-        gyro_data_deg = [math.degrees(val) for val in gyro_data]
-        yaw = gyro_data_deg[0]
-        pitch = gyro_data_deg[1]
-        roll = gyro_data_deg[2]
+    def set_zero_position(self):
+        print("Установка нулевого положения гироскопа...")
+        utime.sleep(2)
+        self.zero_position = self.sensor.gyro
 
-        # Ensure the values are in the range -180 to 180
-        yaw = self.normalize_angle(yaw)
-        pitch = self.normalize_angle(pitch)
-        roll = self.normalize_angle(roll)
+    def complementary_filter(self, angle, rate, dt):
+        alpha = 0.98  # Настройте параметр alpha для оптимальной работы фильтра
+        angle_new = alpha * (angle + rate * dt) + (1 - alpha) * angle
 
-        return yaw, pitch, roll
+        # Приводим угол к диапазону от -180 до 180 градусов
+        angle_new = (angle_new + 180) % 360 - 180
 
-    def normalize_angle(self, angle):
-        while angle > 180:
-            angle -= 360
-        while angle <= -180:
-            angle += 360
-        return angle
+        return angle_new
+    
+    def read_gyroscope_data(self):
+        try:
+            while True:
+                current_time = utime.ticks_ms()
+                dt = (current_time - self.prev_time) / 1000.0
+                self.prev_time = current_time
+
+                gyro_data = tuple(map(lambda x, y: x - y, self.sensor.gyro, self.zero_position))
+                gyro_data_deg = tuple(map(self.rad_to_degrees, gyro_data))
+
+                # Используем фильтр наклона для сглаживания данных
+                self.current_angle = tuple(
+                    self.complementary_filter(angle, rate, dt) for angle, rate in zip(self.current_angle, gyro_data_deg)
+                )
+
+                print("Current Angle (X, Y, Z):", self.current_angle)
+                utime.sleep(0.1)  # Уменьшили задержку для более частого обновления
+        except KeyboardInterrupt:
+            print("Программа завершена.")
+
+if __name__ == "__main__":
+    gyroscope_logger = GyroscopeDataLogger()
+    gyroscope_logger.set_zero_position()
+    gyroscope_logger.read_gyroscope_data()
