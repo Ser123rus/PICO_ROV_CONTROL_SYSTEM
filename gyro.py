@@ -1,54 +1,96 @@
-from machine import Pin, I2C
+"""
+GyroscopeDataLogger class for Raspberry Pi Pico using MPU6500 sensor.
+This class provides orientation estimation using a complementary filter.
+"""
+
+from machine import I2C, Pin
 from mpu6500 import MPU6500
-import math
-import utime
+from time import sleep, ticks_ms
+from math import sqrt, atan2, pi, cos, sin, degrees
 
 class GyroscopeDataLogger:
     def __init__(self):
-        self.i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
-        self.sensor = MPU6500(self.i2c)
-        self.zero_position = (0, 0, 0)
-        self.current_angle = (0, 0, 0)
-        self.prev_time = utime.ticks_ms()
+        """
+        Initialize the GyroscopeDataLogger class.
+        """
+        MPU = 0x68
+        id = 1
+        sda = Pin(26)
+        scl = Pin(27)
+        # create the I2C
+        self.i2c = I2C(id=id, scl=scl, sda=sda)
+        # Scan the bus
+        print(self.i2c.scan())
+        self.mpu = MPU6500(self.i2c)
+        # Calibration and bias offset
+        self.pitch = 0.0
+        self.roll = 0.0
+        self.yaw = 0.0
+        # Constants for complementary filter
+        self.alpha = 0.98
+        self.dt = 0.01  # time step in seconds
+        # Calibration data
+        self.gyro_bias = [0.0, 0.0, 0.0]
+        self.accel_bias = [0.0, 0.0, 0.0]
+        self.calibrate()
 
-    def rad_to_degrees(self, angle_rad):
-        return angle_rad * (180.0 / math.pi)
+    def calibrate(self):
+        """
+        Calibrate the gyroscope and accelerometer biases.
+        """
+        print("Calibrating... Keep the sensor still.")
+        num_samples = 1000
+        gyro_sum = [0.0, 0.0, 0.0]
+        accel_sum = [0.0, 0.0, 0.0]
 
-    def set_zero_position(self):
-        print("Установка нулевого положения гироскопа...")
-        utime.sleep(2)
-        self.zero_position = self.sensor.gyro
+        for _ in range(num_samples):
+            gyro_data = self.mpu.gyro
+            accel_data = self.mpu.acceleration
 
-    def complementary_filter(self, angle, rate, dt):
-        alpha = 0.98  # Настройте параметр alpha для оптимальной работы фильтра
-        angle_new = alpha * (angle + rate * dt) + (1 - alpha) * angle
+            for i in range(3):
+                gyro_sum[i] += gyro_data[i]
+                accel_sum[i] += accel_data[i]
 
-        # Приводим угол к диапазону от -180 до 180 градусов
-        angle_new = (angle_new + 180) % 360 - 180
+            sleep(0.005)
 
-        return angle_new
-    
-    def read_gyroscope_data(self):
-        try:
-            while True:
-                current_time = utime.ticks_ms()
-                dt = (current_time - self.prev_time) / 1000.0
-                self.prev_time = current_time
+        for i in range(3):
+            self.gyro_bias[i] = gyro_sum[i] / num_samples
+            self.accel_bias[i] = accel_sum[i] / num_samples
 
-                gyro_data = tuple(map(lambda x, y: x - y, self.sensor.gyro, self.zero_position))
-                gyro_data_deg = tuple(map(self.rad_to_degrees, gyro_data))
+        print("Calibration done.")
+        print("Gyro Bias:", self.gyro_bias)
+        print("Accel Bias:", self.accel_bias)
 
-                # Используем фильтр наклона для сглаживания данных
-                self.current_angle = tuple(
-                    self.complementary_filter(angle, rate, dt) for angle, rate in zip(self.current_angle, gyro_data_deg)
-                )
+    def update_orientation(self):
+        """
+        Update orientation using complementary filter.
+        """
+        gx, gy, gz = [g - bias for g, bias in zip(self.mpu.gyro, self.gyro_bias)]
+        ax, ay, az = [a - bias for a, bias in zip(self.mpu.acceleration, self.accel_bias)]
 
-                print("Current Angle (X, Y, Z):", self.current_angle)
-                utime.sleep(0.1)  # Уменьшили задержку для более частого обновления
-        except KeyboardInterrupt:
-            print("Программа завершена.")
+        # Calculate angles from gyroscope
+        self.pitch += gx * self.dt
+        self.roll -= gy * self.dt
+        self.yaw += gz * self.dt
+
+        # Correct angles using accelerometer
+        accel_roll = atan2(ay, az)
+        accel_pitch = atan2(-ax, sqrt(ay**2 + az**2))
+
+        self.pitch = self.alpha * self.pitch + (1 - self.alpha) * accel_pitch
+        self.roll = self.alpha * self.roll + (1 - self.alpha) * accel_roll
+
+    def show(self):
+        """
+        Display pitch, roll, and yaw angles in degrees.
+        """
+        self.update_orientation()
+        print("Pitch:", round(degrees(self.pitch), 2), "Roll:", round(degrees(self.roll), 2), "Yaw:", round(degrees(self.yaw), 2))
+        sleep(0.01)
+        res = [round(degrees(self.pitch), 2), round(degrees(self.roll), 2), round(degrees(self.yaw), 2)]
+        return res
 
 if __name__ == "__main__":
-    gyroscope_logger = GyroscopeDataLogger()
-    gyroscope_logger.set_zero_position()
-    gyroscope_logger.read_gyroscope_data()
+    gyro = GyroscopeDataLogger()
+    while True:
+        gyro.show()
