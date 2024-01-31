@@ -51,7 +51,8 @@ if __name__ == "__main__":
     builtInLed.value(0)
     ethernet = EthernetW5500('192.168.0.177', 8080, '192.168.0.100', 8080, 19, 16, 18, 17, 20)
     ethernet.get_mac_address()
-    
+
     loop = uasyncio.get_event_loop()
-    loop.create_task(ethernet.run())
-    loop.run_forever()
+
+    while True:
+        loop.run_until_complete(ethernet.run())
