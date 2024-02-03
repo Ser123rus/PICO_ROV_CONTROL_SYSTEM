@@ -1,10 +1,17 @@
+"""
+GyroscopeDataLogger class for Raspberry Pi Pico using MPU6500 sensor.
+This class provides orientation estimation using a complementary filter.
+"""
 from machine import I2C, Pin
-from math import sqrt, atan2, pi, copysign, sin, cos
-from mpu9250 import MPU9250
-from time import sleep
+from mpu6500 import MPU6500
+from time import sleep, ticks_ms
+from math import sqrt, atan2, pi, cos, sin, degrees
 
 class GyroscopeDataLogger:
     def __init__(self):
+        """
+        Initialize the GyroscopeDataLogger class.
+        """
         MPU = 0x68
         id = 1
         sda = Pin(26)
@@ -13,55 +20,77 @@ class GyroscopeDataLogger:
         self.i2c = I2C(id=id, scl=scl, sda=sda)
         # Scan the bus
         print(self.i2c.scan())
-        self.m = MPU9250(self.i2c)
+        self.mpu = MPU6500(self.i2c)
         # Calibration and bias offset
-        self.pitch_bias = 0.0
-        self.roll_bias = 0.0
-        # For low pass filtering
-        filtered_x_value = 0.0 
-        filtered_y_value = 0.0
-        # declination = 40
-        x,y,z, pitch_bias, roll_bias = self.get_reading()
+        self.pitch = 0.0
+        self.roll = 0.0
+        self.yaw = 0.0
+        # Constants for complementary filter
+        self.alpha = 0.98
+        self.dt = 0.01  # time step in seconds
+        # Calibration data
+        self.gyro_bias = [0.0, 0.0, 0.0]
+        self.accel_bias = [0.0, 0.0, 0.0]
+        self.calibrate()
 
-    def get_reading(self)->float:
-        ''' Returns the readings from the sensor '''
-        #global filtered_y_value, filtered_x_value
-        x = self.m.acceleration[0] 
-        y = self.m.acceleration[1]
-        z = self.m.acceleration[2]
-        print('x',x ,'y',y, 'z',z)
+    def calibrate(self):
+        """
+        Calibrate the gyroscope and accelerometer biases.
+        """
+        print("Calibrating... Keep the sensor still.")
+        num_samples = 1000
+        gyro_sum = [0.0, 0.0, 0.0]
+        accel_sum = [0.0, 0.0, 0.0]
 
-        # Pitch and Roll in Radians
-        roll_rad = atan2(-x, sqrt((z*z)+(y*y)))
-        pitch_rad = atan2(z, copysign(y,y)*sqrt((0.01*x*x)+(y*y)))
-    
-        # Pitch and Roll in Degrees
-        pitch = pitch_rad*180/pi
-        roll = roll_rad*180/pi
+        for _ in range(num_samples):
+            gyro_data = self.mpu.gyro
+            accel_data = self.mpu.acceleration
+
+            for i in range(3):
+                gyro_sum[i] += gyro_data[i]
+                accel_sum[i] += accel_data[i]
+
+            sleep(0.005)
+
+        for i in range(3):
+            self.gyro_bias[i] = gyro_sum[i] / num_samples
+            self.accel_bias[i] = accel_sum[i] / num_samples
+
+        print("Calibration done.")
+        print("Gyro Bias:", self.gyro_bias)
+        print("Accel Bias:", self.accel_bias)
+
+    def update_orientation(self):
+        """
+        Update orientation using complementary filter.
+        """
+        # получаем в 69-й строке данные гироскопа, в 70-й получаем с акселерометра
+        gx, gy, gz = [g - bias for g, bias in zip(self.mpu.gyro, self.gyro_bias)]
+        ax, ay, az = [a - bias for a, bias in zip(self.mpu.acceleration, self.accel_bias)]
+
+        # Calculate angles from gyroscope
+        self.pitch += gx * self.dt
+        self.roll -= gy * self.dt
+        self.yaw += gz * self.dt #yaw не ограничена, изменяется больше чем -180 180,
+        # yaw в дальнейшем не согласовывается с акселерометром, просто ось Z
         
-        # Adjust for original bias
-        pitch -= self.pitch_bias
-        roll -= self.roll_bias
-    
-        return x, y, z, pitch, roll
+        # Correct angles using accelerometer
+        accel_roll = atan2(ay, az)
+        accel_pitch = atan2(-ax, sqrt(ay**2 + az**2))
 
-    def low_pass_filter(self, raw_value:float, remembered_value): # не используется 
-        ''' Only applied 20% of the raw value to the filtered value '''
-        
-        # global filtered_value
-        alpha = 0.8
-        filtered = 0
-        filtered = (alpha * remembered_value) + (1.0 - alpha) * raw_value
-        return filtered
-    
+        # тут комплиментарный фильтр, для того чтобы склеить гироскоп с акселерометром
+        self.pitch = self.alpha * self.pitch + (1 - self.alpha) * accel_pitch 
+        self.roll = self.alpha * self.roll + (1 - self.alpha) * accel_roll
+
     def show(self):
-        ''' Shows the Pitch, Rool and heading '''
-        x, y, z, pitch, roll = self.get_reading()
-        print("Pitch",round(pitch,1), "Roll",round(roll, 1))
-        sleep(0.2)
-        res = [round(pitch,1), round(roll, 1)]
+        """
+        Display pitch, roll, and yaw angles in degrees.
+        """
+        self.update_orientation()
+        print("Pitch:", round(degrees(self.pitch), 2), "Roll:", round(degrees(self.roll), 2), "Yaw:", round(degrees(self.yaw), 2))
+        sleep(0.01)
+        res = [round(degrees(self.pitch), 2), round(degrees(self.roll), 2), round(degrees(self.yaw), 2)]
         return res
-    
 
 if __name__ == "__main__":
     gyro = GyroscopeDataLogger()
