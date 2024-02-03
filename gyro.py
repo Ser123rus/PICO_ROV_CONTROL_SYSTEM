@@ -1,37 +1,69 @@
-import utime
 from machine import I2C, Pin
-from mpu6500 import MPU6500
+from math import sqrt, atan2, pi, copysign, sin, cos
+from mpu9250 import MPU9250
+from time import sleep
 
-class Gyro:
+class GyroscopeDataLogger:
     def __init__(self):
-        self.i2c = I2C(1, scl=Pin(15), sda=Pin(14), freq=400000)
-        self.sensor = MPU6500(self.i2c)
+        MPU = 0x68
+        id = 1
+        sda = Pin(26)
+        scl = Pin(27)
+        # create the I2C
+        self.i2c = I2C(id=id, scl=scl, sda=sda)
+        # Scan the bus
+        print(self.i2c.scan())
+        self.m = MPU9250(self.i2c)
+        # Calibration and bias offset
+        self.pitch_bias = 0.0
+        self.roll_bias = 0.0
+        # For low pass filtering
+        filtered_x_value = 0.0 
+        filtered_y_value = 0.0
+        # declination = 40
+        x,y,z, pitch_bias, roll_bias = self.get_reading()
 
-    def start(self):
-        print("MPU9250 id: " + hex(self.sensor.whoami))
+    def get_reading(self)->float:
+        ''' Returns the readings from the sensor '''
+        #global filtered_y_value, filtered_x_value
+        x = self.m.acceleration[0] 
+        y = self.m.acceleration[1]
+        z = self.m.acceleration[2]
+        print('x',x ,'y',y, 'z',z)
 
-        while True:
-            data = self.sensor.gyro
-            print("X:", data[0])
-            print("Y:", data[1])
-            print("Z:", data[2])
-            utime.sleep_ms(1000)
-
-    def print_column(self, column):
-        if column == "X":
-            index = 0
-        elif column == "Y":
-            index = 1
-        else:  # assume column == "Z"
-            index = 2
-        
-        print(f"{column}:")
-        while True:
-            data = self.sensor.gyro
-            print(data[index])
-            utime.sleep_ms(1000)
-'''
-gyro = Gyro()
-gyro.start()
-   '''     
+        # Pitch and Roll in Radians
+        roll_rad = atan2(-x, sqrt((z*z)+(y*y)))
+        pitch_rad = atan2(z, copysign(y,y)*sqrt((0.01*x*x)+(y*y)))
     
+        # Pitch and Roll in Degrees
+        pitch = pitch_rad*180/pi
+        roll = roll_rad*180/pi
+        
+        # Adjust for original bias
+        pitch -= self.pitch_bias
+        roll -= self.roll_bias
+    
+        return x, y, z, pitch, roll
+
+    def low_pass_filter(self, raw_value:float, remembered_value): # не используется 
+        ''' Only applied 20% of the raw value to the filtered value '''
+        
+        # global filtered_value
+        alpha = 0.8
+        filtered = 0
+        filtered = (alpha * remembered_value) + (1.0 - alpha) * raw_value
+        return filtered
+    
+    def show(self):
+        ''' Shows the Pitch, Rool and heading '''
+        x, y, z, pitch, roll = self.get_reading()
+        print("Pitch",round(pitch,1), "Roll",round(roll, 1))
+        sleep(0.2)
+        res = [round(pitch,1), round(roll, 1)]
+        return res
+    
+
+if __name__ == "__main__":
+    gyro = GyroscopeDataLogger()
+    while True:
+        gyro.show()
