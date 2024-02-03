@@ -1,54 +1,69 @@
-from machine import Pin, I2C
-from mpu6500 import MPU6500
-import math
-import utime
+from machine import I2C, Pin
+from math import sqrt, atan2, pi, copysign, sin, cos
+from mpu9250 import MPU9250
+from time import sleep
 
 class GyroscopeDataLogger:
     def __init__(self):
-        self.i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
-        self.sensor = MPU6500(self.i2c)
-        self.zero_position = (0, 0, 0)
-        self.current_angle = (0, 0, 0)
-        self.prev_time = utime.ticks_ms()
+        MPU = 0x68
+        id = 1
+        sda = Pin(26)
+        scl = Pin(27)
+        # create the I2C
+        self.i2c = I2C(id=id, scl=scl, sda=sda)
+        # Scan the bus
+        print(self.i2c.scan())
+        self.m = MPU9250(self.i2c)
+        # Calibration and bias offset
+        self.pitch_bias = 0.0
+        self.roll_bias = 0.0
+        # For low pass filtering
+        filtered_x_value = 0.0 
+        filtered_y_value = 0.0
+        # declination = 40
+        x,y,z, pitch_bias, roll_bias = self.get_reading()
 
-    def rad_to_degrees(self, angle_rad):
-        return angle_rad * (180.0 / math.pi)
+    def get_reading(self)->float:
+        ''' Returns the readings from the sensor '''
+        #global filtered_y_value, filtered_x_value
+        x = self.m.acceleration[0] 
+        y = self.m.acceleration[1]
+        z = self.m.acceleration[2]
+        print('x',x ,'y',y, 'z',z)
 
-    def set_zero_position(self):
-        print("Установка нулевого положения гироскопа...")
-        utime.sleep(2)
-        self.zero_position = self.sensor.gyro
-
-    def complementary_filter(self, angle, rate, dt):
-        alpha = 0.98  # Настройте параметр alpha для оптимальной работы фильтра
-        angle_new = alpha * (angle + rate * dt) + (1 - alpha) * angle
-
-        # Приводим угол к диапазону от -180 до 180 градусов
-        angle_new = (angle_new + 180) % 360 - 180
-
-        return angle_new
+        # Pitch and Roll in Radians
+        roll_rad = atan2(-x, sqrt((z*z)+(y*y)))
+        pitch_rad = atan2(z, copysign(y,y)*sqrt((0.01*x*x)+(y*y)))
     
-    def read_gyroscope_data(self):
-        try:
-            while True:
-                current_time = utime.ticks_ms()
-                dt = (current_time - self.prev_time) / 1000.0
-                self.prev_time = current_time
+        # Pitch and Roll in Degrees
+        pitch = pitch_rad*180/pi
+        roll = roll_rad*180/pi
+        
+        # Adjust for original bias
+        pitch -= self.pitch_bias
+        roll -= self.roll_bias
+    
+        return x, y, z, pitch, roll
 
-                gyro_data = tuple(map(lambda x, y: x - y, self.sensor.gyro, self.zero_position))
-                gyro_data_deg = tuple(map(self.rad_to_degrees, gyro_data))
-
-                # Используем фильтр наклона для сглаживания данных
-                self.current_angle = tuple(
-                    self.complementary_filter(angle, rate, dt) for angle, rate in zip(self.current_angle, gyro_data_deg)
-                )
-
-                print("Current Angle (X, Y, Z):", self.current_angle)
-                utime.sleep(0.1)  # Уменьшили задержку для более частого обновления
-        except KeyboardInterrupt:
-            print("Программа завершена.")
+    def low_pass_filter(self, raw_value:float, remembered_value): # не используется 
+        ''' Only applied 20% of the raw value to the filtered value '''
+        
+        # global filtered_value
+        alpha = 0.8
+        filtered = 0
+        filtered = (alpha * remembered_value) + (1.0 - alpha) * raw_value
+        return filtered
+    
+    def show(self):
+        ''' Shows the Pitch, Rool and heading '''
+        x, y, z, pitch, roll = self.get_reading()
+        print("Pitch",round(pitch,1), "Roll",round(roll, 1))
+        sleep(0.2)
+        res = [round(pitch,1), round(roll, 1)]
+        return res
+    
 
 if __name__ == "__main__":
-    gyroscope_logger = GyroscopeDataLogger()
-    gyroscope_logger.set_zero_position()
-    gyroscope_logger.read_gyroscope_data()
+    gyro = GyroscopeDataLogger()
+    while True:
+        gyro.show()
