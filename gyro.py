@@ -2,7 +2,6 @@
 GyroscopeDataLogger class for Raspberry Pi Pico using MPU6500 sensor.
 This class provides orientation estimation using a complementary filter.
 """
-
 from machine import I2C, Pin
 from mpu6500 import MPU6500
 from time import sleep, ticks_ms
@@ -65,19 +64,22 @@ class GyroscopeDataLogger:
         """
         Update orientation using complementary filter.
         """
+        # получаем в 69-й строке данные гироскопа, в 70-й получаем с акселерометра
         gx, gy, gz = [g - bias for g, bias in zip(self.mpu.gyro, self.gyro_bias)]
         ax, ay, az = [a - bias for a, bias in zip(self.mpu.acceleration, self.accel_bias)]
 
         # Calculate angles from gyroscope
         self.pitch += gx * self.dt
         self.roll -= gy * self.dt
-        self.yaw += gz * self.dt
-
+        self.yaw += gz * self.dt #yaw не ограничена, изменяется больше чем -180 180,
+        # yaw в дальнейшем не согласовывается с акселерометром, просто ось Z
+        
         # Correct angles using accelerometer
         accel_roll = atan2(ay, az)
         accel_pitch = atan2(-ax, sqrt(ay**2 + az**2))
 
-        self.pitch = self.alpha * self.pitch + (1 - self.alpha) * accel_pitch
+        # тут комплиментарный фильтр, для того чтобы склеить гироскоп с акселерометром
+        self.pitch = self.alpha * self.pitch + (1 - self.alpha) * accel_pitch 
         self.roll = self.alpha * self.roll + (1 - self.alpha) * accel_roll
 
     def show(self):
