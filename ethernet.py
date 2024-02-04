@@ -15,7 +15,7 @@ class EthernetW5500():
         self.nic = network.WIZNET5K(self.spi, Pin(eth_cs_pinid), Pin(eth_reset_pinid))
         self.nic.active(True)
         self.data = None
-        self.toSend = None
+        self.toSend = '\x00\x00\x00\x00\x00\x00'
         self.nic.ifconfig((local_ip, '255.255.255.0', '192.168.0.1', '8.8.8.8'))
         
         while not self.nic.isconnected():
@@ -55,6 +55,7 @@ class EthernetW5500():
     def run(self):
         self.send(self.toSend)
         self.receive()
+        #await uasyncio.gather(self.send(self.toSend), self.receive()) # поменять отправляемое
 
 if __name__ == "__main__":
     builtInLed = Pin(25, Pin.OUT)
