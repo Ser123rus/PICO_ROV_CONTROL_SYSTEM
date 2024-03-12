@@ -15,7 +15,7 @@ class EthernetW5500():
         self.nic = network.WIZNET5K(self.spi, Pin(eth_cs_pinid), Pin(eth_reset_pinid))
         self.nic.active(True)
         self.data = None
-        self.toSend = None
+        self.toSend = '\x00\x00\x00\x00\x00\x00'
         self.nic.ifconfig((local_ip, '255.255.255.0', '192.168.0.1', '8.8.8.8'))
         
         while not self.nic.isconnected():
@@ -62,13 +62,5 @@ if __name__ == "__main__":
     builtInLed.value(0)
     ethernet = EthernetW5500('192.168.0.177', 8080, '192.168.0.100', 8080, 19, 16, 18, 17, 20)
     ethernet.get_mac_address()
-<<<<<<< HEAD
-
-    loop = uasyncio.get_event_loop()
-
-    while True:
-        loop.run_until_complete(ethernet.run())
-=======
     while True:
         ethernet.run()
->>>>>>> e5368dbe5859c7469729a157ce2c359042e8a0bc
