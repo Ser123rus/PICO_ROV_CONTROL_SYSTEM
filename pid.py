@@ -2,7 +2,7 @@ from machine import Pin
 import utime
 
 # kp, ki, kd - эти коэффициенты необходимо будет задать, а затем подстроить
-# dt - времzя, т.е как часто будет пересчитываться П.И.Д
+# dt - времzя, т.е как часто будет пересчитываться П.И.Д, нужно чтобы время совпадало с временем опроса датчиков
 # minOut, maxOut - ограничение выхода
 
 class PIDController:
@@ -48,12 +48,20 @@ class PIDController:
     def reset(self):
         self.prevErr = 0
         self.integral = 0
-
+    
     def log_values(self):
         print(f"PrevErr: {self.prevErr}, Integral: {self.integral}")
 
     def compute(self, input, setpoint):
         err = setpoint - input
+        
+        #проверяем вход/input, если он находится в мертвой зоне - [0-25,90,127-180],
+        # то ставлю ошибку в состояние None,
+        # Тогда пока вход/input находится внутри мертвой зоны, то
+        # выходной воздействие игнорируется
+        if (input >= 0 and input <= 25) or (input >= 90 and input <= 127):
+            err = None
+    
         self.integral = self._constrain(self.integral + err * self.dt * self._ki, self.minOut, self.maxOut)
         D = (err - self.prevErr) / self.dt
         self.prevErr = err
