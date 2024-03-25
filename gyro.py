@@ -157,5 +157,4 @@ if __name__ == "__main__":
         direction = gyro.get_direction(heading)
         print("Pitch:", round(pitch), "Roll:", round(roll), "Yaw:", round(yaw))
         print("Heading:", round(heading), "degrees, Direction:", direction)
-        sleep(0.03
-              )
+        sleep(0.03)
