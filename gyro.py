@@ -87,9 +87,9 @@ class GyroscopeDataLogger:
         Display pitch, roll, and yaw angles in degrees.
         """
         self.update_orientation()
-        print("Pitch:", round(degrees(self.pitch), 2), "Roll:", round(degrees(self.roll), 2), "Yaw:", round(degrees(self.yaw), 2))
+        print("Pitch:", round(degrees(self.pitch)), "Roll:", round(degrees(self.roll)), "Yaw:", round(degrees(self.yaw)))
         sleep(0.01)
-        res = [round(degrees(self.pitch), 2), round(degrees(self.roll), 2), round(degrees(self.yaw), 2)]
+        res = [round(degrees(self.pitch)), round(degrees(self.roll)), round(degrees(self.yaw))]
         return res
 
 if __name__ == "__main__":

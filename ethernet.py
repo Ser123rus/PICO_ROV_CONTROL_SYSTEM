@@ -9,14 +9,15 @@ class EthernetW5500():
     def __init__(self, local_ip, local_port, remote_ip, remote_port, mosi_pinid, miso_pinid, sck_pinid, eth_cs_pinid, eth_reset_pinid):
         self.udp_socket = socket(usocket.AF_INET, usocket.SOCK_DGRAM)
         self.udp_socket.bind((local_ip, local_port))
-        self.udp_socket.settimeout(2.0)
+        self.udp_socket.settimeout(3)
         self.remote_addr = (remote_ip, remote_port)
         self.spi = SPI(0, 2_000_000, mosi=Pin(mosi_pinid), miso=Pin(miso_pinid), sck=Pin(sck_pinid))
         self.nic = network.WIZNET5K(self.spi, Pin(eth_cs_pinid), Pin(eth_reset_pinid))
         self.nic.active(True)
         self.data = None
+        self.result = [91.0, 91.0, 91.0, 91.0, 91.0, 91.0, 1, 1]
         self.toSend = '\x00\x00\x00\x00\x00\x00'
-        self.nic.ifconfig((local_ip, '255.255.255.0', '192.168.0.1', '8.8.8.8'))
+        self.nic.ifconfig((local_ip, '255.255.255.0', '192.168.1.1', '8.8.8.8'))
         
         while not self.nic.isconnected():
             time.sleep(5)
@@ -36,12 +37,12 @@ class EthernetW5500():
             print(f"Received data: {received_data} from {addr}")
             if self.data != received_data:
                 print("Сохранение новых данных...")
-                self.data = received_data#.decode()
-                # мб нужно будет вызвать .decode() на данные, перед тем
-                # как отправлять их на движители, пока не пишу, чтобы в символы
-                # не преобразовалось
+                self.data = received_data
+                for i in range(8):
+                    self.result[i] = float(self.data[i])
         except Exception as e:
             print("Error receiving data:", e)
+            self.result = [91.0, 91.0, 91.0, 91.0, 91.0, 91.0, 1, 1]
             return
 
     def send(self, data):
