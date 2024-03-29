@@ -12,7 +12,6 @@ class GyroscopeDataLogger:
         """
         Initialize the GyroscopeDataLogger class.
         """
-        # Инициализация I2C для связи с датчиком
         MPU = 0x68
         id = 1
         sda = Pin(26)
@@ -23,7 +22,8 @@ class GyroscopeDataLogger:
         # Начальные углы крена, тангажа и рыскания (pitch, roll, yaw)
         self.pitch = 0.0
         self.roll = 0.0
-        self.yaw = 0.0
+        self.yaw_gyro = 0.0
+        self.yaw_mag = 0.0
         # Константы для комплементарного фильтра
         self.alpha = 0.98
         self.dt = 0.01  # Шаг времени в секундах
@@ -33,6 +33,7 @@ class GyroscopeDataLogger:
         self.mag_bias = [0.0, 0.0, 0.0]
         self.mag_scale = [1.0, 1.0, 1.0]
         self.calibrate()
+        self.calibrate_range()
 
     def calibrate(self):
         """
@@ -74,6 +75,42 @@ class GyroscopeDataLogger:
         print("Mag Bias:", self.mag_bias)
         print("Mag Scale:", self.mag_scale)
 
+    def calibrate_range(self):
+        """
+        Calibrate gyroscope to measure full range of angles.
+        """
+        print("Calibrating range... Rotate the sensor to cover all angles.")
+
+        # Инициализация переменных для хранения минимальных и максимальных значений углов
+        min_pitch, max_pitch = float('inf'), -float('inf')
+        min_roll, max_roll = float('inf'), -float('inf')
+        min_yaw, max_yaw = float('inf'), -float('inf')
+
+        # Сбор образцов для калибровки
+        num_samples = 20000
+        for _ in range(num_samples):
+            pitch, roll, yaw = self.get_orientation()
+            min_pitch = min(min_pitch, pitch)
+            max_pitch = max(max_pitch, pitch)
+            min_roll = min(min_roll, roll)
+            max_roll = max(max_roll, roll)
+            min_yaw = min(min_yaw, yaw)
+            max_yaw = max(max_yaw, yaw)
+            sleep(0.005)
+
+        # Обновление значений для диапазона углов
+        self.min_pitch = min_pitch
+        self.max_pitch = max_pitch
+        self.min_roll = min_roll
+        self.max_roll = max_roll
+        self.min_yaw = min_yaw
+        self.max_yaw = max_yaw
+
+        print("Range calibration done.")
+        print("Pitch range: [{}, {}]".format(self.min_pitch, self.max_pitch))
+        print("Roll range: [{}, {}]".format(self.min_roll, self.max_roll))
+        print("Yaw range: [{}, {}]".format(self.min_yaw, self.max_yaw))
+
     def update_orientation(self):
         """
         Update orientation using complementary filter.
@@ -85,6 +122,7 @@ class GyroscopeDataLogger:
         # Расчет углов от гироскопа
         self.pitch += gx * self.dt
         self.roll -= gy * self.dt
+        self.yaw_gyro += gz * self.dt
         
         # Коррекция углов по акселерометру
         accel_roll = atan2(ay, az)
@@ -97,7 +135,9 @@ class GyroscopeDataLogger:
         # Расчет yaw по магнитометру
         Yh = (my * cos(self.roll)) - (mz * sin(self.roll))
         Xh = (mx * cos(self.pitch)) + (my * sin(self.roll) * sin(self.pitch)) + (mz * cos(self.roll) * sin(self.pitch))
-        self.yaw = atan2(Yh, Xh)
+        self.yaw_mag = atan2(Yh, Xh)
+        
+        self.yaw = self.alpha * self.yaw_gyro + (1 - self.alpha) * self.yaw_mag
 
     def get_heading(self):
         """
@@ -157,5 +197,4 @@ if __name__ == "__main__":
         direction = gyro.get_direction(heading)
         print("Pitch:", round(pitch), "Roll:", round(roll), "Yaw:", round(yaw))
         print("Heading:", round(heading), "degrees, Direction:", direction)
-        sleep(0.03
-              )
+        sleep(0.05)
