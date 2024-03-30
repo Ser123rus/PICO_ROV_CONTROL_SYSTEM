@@ -52,16 +52,14 @@ class PIDController:
     def log_values(self):
         print(f"PrevErr: {self.prevErr}, Integral: {self.integral}")
 
+    #пока сделал так, если
+    #input = 90, то возвращаем 0 пид не дает сигнал соотвественно (стоим на месте)
+    # проверить потом сделат нормально
     def compute(self, input, setpoint):
-        err = setpoint - input
-        
-        #проверяем вход/input, если он находится в мертвой зоне - [0-25,90,127-180],
-        # то ставлю ошибку в состояние None,
-        # Тогда пока вход/input находится внутри мертвой зоны, то
-        # выходной воздействие игнорируется
-        if (input >= 0 and input <= 25) or (input >= 90 and input <= 127):
-            err = None
+        if input == 90:
+            return 0
     
+        err = setpoint - input
         self.integral = self._constrain(self.integral + err * self.dt * self._ki, self.minOut, self.maxOut)
         D = (err - self.prevErr) / self.dt
         self.prevErr = err

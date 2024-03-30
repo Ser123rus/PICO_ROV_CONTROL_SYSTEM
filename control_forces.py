@@ -71,7 +71,7 @@ if __name__ == "__main__":
     max_input = 100
 
     # Пример входных значений (от min_input до max_input) для каждого двигателя
-    inputs = [0, 100, 65, 75, 90]
+    inputs = [1, 126, 65, 75, 90]
 
     # Создаем экземпляр класса MotorControl с пользовательскими значениями диапазона
     motor_control = MotorControl(min_input, max_input)
