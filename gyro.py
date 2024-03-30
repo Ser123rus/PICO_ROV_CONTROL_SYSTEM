@@ -5,7 +5,7 @@ This class provides orientation estimation using a complementary filter.
 from machine import I2C, Pin
 from mpu9250 import MPU9250
 from time import sleep
-from math import sqrt, atan2, degrees, sin, cos
+from math import sqrt, atan2, degrees, sin, cos, pi
 
 class GyroscopeDataLogger:
     def __init__(self):
@@ -87,7 +87,7 @@ class GyroscopeDataLogger:
         min_yaw, max_yaw = float('inf'), -float('inf')
 
         # Сбор образцов для калибровки
-        num_samples = 20000
+        num_samples = 5000
         for _ in range(num_samples):
             pitch, roll, yaw = self.get_orientation()
             min_pitch = min(min_pitch, pitch)
@@ -110,6 +110,7 @@ class GyroscopeDataLogger:
         print("Pitch range: [{}, {}]".format(self.min_pitch, self.max_pitch))
         print("Roll range: [{}, {}]".format(self.min_roll, self.max_roll))
         print("Yaw range: [{}, {}]".format(self.min_yaw, self.max_yaw))
+
 
     def update_orientation(self):
         """
@@ -137,7 +138,15 @@ class GyroscopeDataLogger:
         Xh = (mx * cos(self.pitch)) + (my * sin(self.roll) * sin(self.pitch)) + (mz * cos(self.roll) * sin(self.pitch))
         self.yaw_mag = atan2(Yh, Xh)
         
+        # Применение комплементарного фильтра к углам yaw
         self.yaw = self.alpha * self.yaw_gyro + (1 - self.alpha) * self.yaw_mag
+        
+        # Ограничение yaw в диапазоне от -180 до 180 градусов
+        if self.yaw > pi:
+            self.yaw -= 2 * pi
+        elif self.yaw < -pi:
+            self.yaw += 2 * pi
+
 
     def get_heading(self):
         """
